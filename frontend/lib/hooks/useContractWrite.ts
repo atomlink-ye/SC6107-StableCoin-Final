@@ -89,7 +89,11 @@ function useApproveAndExecute() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  const withGasBuffer = (gas: bigint) => (gas * 12n) / 10n + 50_000n;
+  const GAS_CAP = 15_000_000n; // Sepolia block gas limit is 16,777,216; stay under it
+  const withGasBuffer = (gas: bigint) => {
+    const buffered = (gas * 12n) / 10n + 50_000n;
+    return buffered > GAS_CAP ? GAS_CAP : buffered;
+  };
 
   const estimateGasWithBuffer = async (params: {
     address: Address;
@@ -279,7 +283,7 @@ export function useBurnStableCoin() {
 
 export function useWithdrawCollateral() {
   const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
-  
+
   const execute = async (tokenAddress: string, amount: string) => {
     const amountWei = parseEther(amount);
     return executeBase({
@@ -288,6 +292,36 @@ export function useWithdrawCollateral() {
       abi: STABLE_COIN_ENGINE_ABI,
       functionName: 'redeemCollateral',
       args: [tokenAddress as Address, amountWei]
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+export function useLiquidate() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  /**
+   * Liquidate an undercollateralised position.
+   * @param collateralToken - The collateral token address to seize (WETH or WBTC)
+   * @param userToLiquidate - The borrower's address
+   * @param debtToCover     - Amount of SC debt to repay (in ether units, e.g. "100")
+   */
+  const execute = async (
+    collateralToken: string,
+    userToLiquidate: string,
+    debtToCover: string
+  ) => {
+    const debtWei = parseEther(debtToCover);
+    return executeBase({
+      // Liquidator must spend their own SC to cover the debt
+      tokenAddress: CONTRACTS.STABLE_COIN,
+      spenderAddress: CONTRACTS.STABLE_COIN_ENGINE,
+      amount: debtWei,
+      contractAddress: CONTRACTS.STABLE_COIN_ENGINE,
+      abi: STABLE_COIN_ENGINE_ABI,
+      functionName: 'liquidate',
+      args: [collateralToken as Address, userToLiquidate as Address, debtWei],
     });
   };
 
