@@ -6,7 +6,7 @@ import { useAccount, useReadContract } from 'wagmi';
 import Header from '@/app/components/Header';
 import { useLiquidations, type UserPosition } from '@/lib/hooks/useLiquidations';
 import { useLiquidationAuctions, type AuctionData } from '@/lib/hooks/useLiquidationAuctions';
-import { useStartLiquidation, usePlaceBid, useFinalizeAuction } from '@/lib/hooks/useContractWrite';
+import { useStartLiquidation, usePlaceBid, useFinalizeAuction, useRefreshSCOracle } from '@/lib/hooks/useContractWrite';
 import { CONTRACTS, STABLE_COIN_ENGINE_ABI, ERC20_ABI, activeChain } from '@/lib/contracts';
 import { cn } from '@/lib/utils';
 
@@ -340,6 +340,48 @@ function Row({ label, value, children, mono, red, green, className }: {
   );
 }
 
+// ─── Refresh SC Oracle button ─────────────────────────────────────────────────
+// The SC price feed is a MockV3Aggregator with no auto-update.
+// After 3 hours its timestamp goes stale and every tx reverts with OracleLib__StalePrice.
+// This button calls updateAnswer($1.00) to reset the timer.
+
+function RefreshOracleButton() {
+  const { execute, isPending, step } = useRefreshSCOracle();
+  const [done, setDone] = useState(false);
+
+  const handleRefresh = async () => {
+    const hash = await execute();
+    if (hash) setDone(true);
+  };
+
+  return (
+    <button
+      onClick={handleRefresh}
+      disabled={isPending}
+      title="The SC mock price feed expires every 3 h. Click to refresh it and unblock transactions."
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer',
+        done
+          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+          : isPending
+            ? 'bg-amber-500/10 text-amber-400 border-amber-500/25 cursor-not-allowed'
+            : 'bg-red-500/10 text-red-400 border-red-500/25 hover:bg-red-500/20'
+      )}
+    >
+      {isPending ? (
+        <>
+          <span className="w-3 h-3 border-2 border-amber-400/40 border-t-amber-400 rounded-full animate-spin" />
+          Refreshing…
+        </>
+      ) : done ? (
+        <>✓ Oracle Live</>
+      ) : (
+        <>⚠ Refresh SC Oracle</>
+      )}
+    </button>
+  );
+}
+
 // ─── Finalize button (inline, self-contained hook instance) ──────────────────
 
 function FinalizeButton({ auctionId, onSuccess }: { auctionId: bigint; onSuccess: () => void }) {
@@ -398,11 +440,15 @@ export default function LiquidationsPage() {
         </div>
 
         {/* Title */}
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-100">Liquidation Monitor</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Monitor underwater positions and participate in English-auction liquidations.
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-xl font-bold text-slate-100">Liquidation Monitor</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              Monitor underwater positions and participate in English-auction liquidations.
+            </p>
+          </div>
+          {/* The SC price feed is a mock that expires every 3h — keep it fresh */}
+          <RefreshOracleButton />
         </div>
 
         {/* Stats */}

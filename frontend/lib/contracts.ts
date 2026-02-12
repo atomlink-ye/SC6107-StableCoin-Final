@@ -455,6 +455,18 @@ export const LIQUIDATION_AUCTION_ABI = [
   },
 ] as const;
 
+// Minimal ABI for the MockV3Aggregator SC price feed deployed on Sepolia.
+// updateAnswer() is public — anyone can call it to reset the stale-price timer.
+export const MOCK_V3_AGGREGATOR_ABI = [
+  {
+    inputs: [{ name: '_answer', type: 'int256' }],
+    name: 'updateAnswer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+
 export const defaultAccount = ANVIL_ACCOUNTS.deployer;
 
 

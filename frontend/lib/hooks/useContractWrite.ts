@@ -11,7 +11,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { CONTRACTS, ERC20_ABI, STABLE_COIN_ENGINE_ABI, LIQUIDATION_AUCTION_ABI } from '../contracts';
+import { CONTRACTS, ERC20_ABI, STABLE_COIN_ENGINE_ABI, LIQUIDATION_AUCTION_ABI, MOCK_V3_AGGREGATOR_ABI } from '../contracts';
 
 // Human-readable messages for each custom error name
 const ERROR_MESSAGES: Record<string, (args?: readonly unknown[]) => string> = {
@@ -364,6 +364,27 @@ export function useFinalizeAuction() {
       abi: LIQUIDATION_AUCTION_ABI,
       functionName: 'finalizeAuction',
       args: [auctionId],
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+/**
+ * Refreshes the SC MockV3Aggregator price feed on Sepolia.
+ * The OracleLib has a 3-hour stale timeout; calling updateAnswer() resets
+ * the updatedAt timestamp so every transaction stops reverting with StalePrice.
+ * updateAnswer() is public — no special permissions required.
+ */
+export function useRefreshSCOracle() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  const execute = async () => {
+    return executeBase({
+      contractAddress: CONTRACTS.SC_PRICE_FEED,
+      abi: MOCK_V3_AGGREGATOR_ABI,
+      functionName: 'updateAnswer',
+      args: [100_000_000n], // $1.00 with 8 decimals
     });
   };
 
