@@ -372,6 +372,101 @@ export const PRICE_FEED_ABI = [
   },
 ] as const;
 
+export const LIQUIDATION_AUCTION_ABI = [
+  {
+    inputs: [
+      { name: 'auctionId', type: 'uint256' },
+      { name: 'bidAmount', type: 'uint256' },
+    ],
+    name: 'placeBid',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'auctionId', type: 'uint256' }],
+    name: 'finalizeAuction',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'auctionId', type: 'uint256' }],
+    name: 'getAuction',
+    outputs: [
+      {
+        components: [
+          { name: 'user', type: 'address' },
+          { name: 'collateralToken', type: 'address' },
+          { name: 'collateralAmount', type: 'uint256' },
+          { name: 'targetDebt', type: 'uint256' },
+          { name: 'minimumBid', type: 'uint256' },
+          { name: 'highestBid', type: 'uint256' },
+          { name: 'highestBidder', type: 'address' },
+          { name: 'endTime', type: 'uint64' },
+          { name: 'settled', type: 'bool' },
+        ],
+        name: '',
+        type: 'tuple',
+      },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'getNextAuctionId',
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    type: 'event',
+    name: 'AuctionCreated',
+    inputs: [
+      { name: 'auctionId', type: 'uint256', indexed: true },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'collateralToken', type: 'address', indexed: true },
+      { name: 'collateralAmount', type: 'uint256', indexed: false },
+      { name: 'targetDebt', type: 'uint256', indexed: false },
+      { name: 'minimumBid', type: 'uint256', indexed: false },
+      { name: 'endTime', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'BidPlaced',
+    inputs: [
+      { name: 'auctionId', type: 'uint256', indexed: true },
+      { name: 'bidder', type: 'address', indexed: true },
+      { name: 'bidAmount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AuctionSettled',
+    inputs: [
+      { name: 'auctionId', type: 'uint256', indexed: true },
+      { name: 'winner', type: 'address', indexed: true },
+      { name: 'winningBid', type: 'uint256', indexed: false },
+      { name: 'collateralAwarded', type: 'uint256', indexed: false },
+      { name: 'collateralReturned', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+// Minimal ABI for the MockV3Aggregator SC price feed deployed on Sepolia.
+// updateAnswer() is public — anyone can call it to reset the stale-price timer.
+export const MOCK_V3_AGGREGATOR_ABI = [
+  {
+    inputs: [{ name: '_answer', type: 'int256' }],
+    name: 'updateAnswer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+
 export const defaultAccount = ANVIL_ACCOUNTS.deployer;
 
 

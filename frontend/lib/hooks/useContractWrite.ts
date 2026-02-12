@@ -11,7 +11,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { CONTRACTS, ERC20_ABI, STABLE_COIN_ENGINE_ABI } from '../contracts';
+import { CONTRACTS, ERC20_ABI, STABLE_COIN_ENGINE_ABI, LIQUIDATION_AUCTION_ABI, MOCK_V3_AGGREGATOR_ABI } from '../contracts';
 
 // Human-readable messages for each custom error name
 const ERROR_MESSAGES: Record<string, (args?: readonly unknown[]) => string> = {
@@ -89,7 +89,11 @@ function useApproveAndExecute() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  const withGasBuffer = (gas: bigint) => (gas * 12n) / 10n + 50_000n;
+  const GAS_CAP = 15_000_000n; // Sepolia block gas limit is 16,777,216; stay under it
+  const withGasBuffer = (gas: bigint) => {
+    const buffered = (gas * 12n) / 10n + 50_000n;
+    return buffered > GAS_CAP ? GAS_CAP : buffered;
+  };
 
   const estimateGasWithBuffer = async (params: {
     address: Address;
@@ -111,7 +115,9 @@ function useApproveAndExecute() {
       });
       return withGasBuffer(estimated);
     } catch {
-      return undefined;
+      // Estimation failed (e.g. simulation reverts). Use the cap so viem never
+      // submits an unbounded gas value that exceeds the network block gas limit.
+      return GAS_CAP;
     }
   };
 
@@ -279,7 +285,7 @@ export function useBurnStableCoin() {
 
 export function useWithdrawCollateral() {
   const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
-  
+
   const execute = async (tokenAddress: string, amount: string) => {
     const amountWei = parseEther(amount);
     return executeBase({
@@ -288,6 +294,97 @@ export function useWithdrawCollateral() {
       abi: STABLE_COIN_ENGINE_ABI,
       functionName: 'redeemCollateral',
       args: [tokenAddress as Address, amountWei]
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+/**
+ * Phase 1 — Start a liquidation auction on an underwater position.
+ * liquidate() does NOT take SC from the caller; it seizes the user's collateral
+ * and hands it to the LiquidationAuction contract to run an English auction.
+ */
+export function useStartLiquidation() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  const execute = async (
+    collateralToken: string,
+    userToLiquidate: string,
+    debtToCover: string
+  ) => {
+    const debtWei = parseEther(debtToCover);
+    return executeBase({
+      // No token approval — liquidate() does not pull SC from the caller
+      contractAddress: CONTRACTS.STABLE_COIN_ENGINE,
+      abi: STABLE_COIN_ENGINE_ABI,
+      functionName: 'liquidate',
+      args: [collateralToken as Address, userToLiquidate as Address, debtWei],
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+/**
+ * Phase 2 — Place a bid on an active liquidation auction.
+ * Approves SC to the LiquidationAuction contract, then calls placeBid().
+ * The previous highest bidder is automatically refunded by the contract.
+ */
+export function usePlaceBid() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  const execute = async (auctionId: bigint, bidAmount: string) => {
+    const bidWei = parseEther(bidAmount);
+    return executeBase({
+      tokenAddress: CONTRACTS.STABLE_COIN,
+      spenderAddress: CONTRACTS.LIQUIDATION_AUCTION,
+      amount: bidWei,
+      contractAddress: CONTRACTS.LIQUIDATION_AUCTION,
+      abi: LIQUIDATION_AUCTION_ABI,
+      functionName: 'placeBid',
+      args: [auctionId, bidWei],
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+/**
+ * Phase 3 — Finalize a completed auction.
+ * Can be called by anyone once the auction has expired or the highest bid
+ * equals the target debt. No SC approval required.
+ */
+export function useFinalizeAuction() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  const execute = async (auctionId: bigint) => {
+    return executeBase({
+      contractAddress: CONTRACTS.LIQUIDATION_AUCTION,
+      abi: LIQUIDATION_AUCTION_ABI,
+      functionName: 'finalizeAuction',
+      args: [auctionId],
+    });
+  };
+
+  return { execute, isPending, error, step };
+}
+
+/**
+ * Refreshes the SC MockV3Aggregator price feed on Sepolia.
+ * The OracleLib has a 3-hour stale timeout; calling updateAnswer() resets
+ * the updatedAt timestamp so every transaction stops reverting with StalePrice.
+ * updateAnswer() is public — no special permissions required.
+ */
+export function useRefreshSCOracle() {
+  const { execute: executeBase, isPending, error, step } = useApproveAndExecute();
+
+  const execute = async () => {
+    return executeBase({
+      contractAddress: CONTRACTS.SC_PRICE_FEED,
+      abi: MOCK_V3_AGGREGATOR_ABI,
+      functionName: 'updateAnswer',
+      args: [100_000_000n], // $1.00 with 8 decimals
     });
   };
 
